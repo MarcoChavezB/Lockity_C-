@@ -1,0 +1,168 @@
+#include "mqtt.h"
+
+// Definición del certificado
+const char *ca_cert = R"EOF(
+-----BEGIN CERTIFICATE-----
+MIIFETCCAvmgAwIBAgIUOgJIiGt/uKJhufm8IOisyOJkwlMwDQYJKoZIhvcNAQEL
+BQAwGDEWMBQGA1UEAwwNTXlNb3NxdWl0dG9DQTAeFw0yNTA3MDQyMDAzMjRaFw0z
+NTA3MDIyMDAzMjRaMBgxFjAUBgNVBAMMDU15TW9zcXVpdHRvQ0EwggIiMA0GCSqG
+SIb3DQEBAQUAA4ICDwAwggIKAoICAQC2vBn6yGzKsjUoRLW1EUxoROztDmQ0Pzyo
+/eBvoJyYbRFTFOV+qRg7ljJ0YWMYwN1DQBWE2m8AKT9wwRz1vZQy8hIAxCOJVOul
+P1V81EmUespR8ANvLABpHuywLXVrAtv6yP02zY2vOKGtW8le9ZO0M3nVsZGl0uqN
+yGN4D6K1ndLC0WQD+JzMYR8Rwbd70+6B5tldNAAyy5MK65f7bd29paz+gMXorTeF
+RKjBgNMVfHB2NXcDYhE+GvFiiy3kurPw7sg+rhlPIaBbRLLyvGrsvesHx/5/Yt6h
+S9r0vQNuQIPgOgYM4NGTNNM3B0BsJxE6ymNgD1AR/ijwS4ybk0XMTiCdFq1oudWg
+w2LE53TTTnmiJsXdalMpQVuzbRPsboVFjnxYlmGv2S8GKrh0h+o3WCye7ybRnpiJ
+MofQJ9lrjNWMSOtJoWoz+25cxVOmLh4FVQqtqH9ccvydTaFlFKroLQGuMzplKHYe
+zSAmqhHS0BfBG1BkqyeG4/1lNdPHpvS4pdYtlyILCiOJIPgs2kaqtCTPlE5Mynzk
+ZobzKQMEnAS2LErPzgfk9xpOWk4qw4HTeMNxKvEos5lsRw1JjGyQiu9ufFG1o3h6
+gbvPPUqJsNjgPppV6dfdnC5wfauXbdbMBLxHUqyljJBy6K4XHaf0dU97K90zhP/j
+aDuePPRIJQIDAQABo1MwUTAdBgNVHQ4EFgQUs77eHb1gZpfd+7ILnNvYJHoqZjEw
+HwYDVR0jBBgwFoAUs77eHb1gZpfd+7ILnNvYJHoqZjEwDwYDVR0TAQH/BAUwAwEB
+/zANBgkqhkiG9w0BAQsFAAOCAgEAJel7P4yYMInZjwtyf3cNrls3aYz8UGMVdm9v
+iWcQoerCxnWs6zV3cmBXwchy8kQ+Ml6HcFeMzV1x40ZSj+2viGzxdaH5xyPB6R0n
+0I3nA1izf8N+fDOnO36yb1tcJ+QkRDkpWaQPckKyuSDY2Su+ExLHnkIi62S8+AVv
+J8jiNdQARJ62YvEjMvMfqS6t+X1KVvaGpcTbuZGzREohzd925JUoTR93Xb7NY/8g
+raECg9eDJ2JFBjD83ByH+mss+uz8gldRoL00Z1uJ5qOH16eu1uukHoh5BlHVi5ea
+Z9vVzI0qHHaX/MtAsHQQn7X0VaUqTCtOW0GSGWbVKA0bUyjjzfiPBhhtFD+M3gQe
+BpPhe4rYubQeWK/8/zoK0AeTDkg9M5ZgtrzPbXTn1UFFRt11QEnUU0LPUi15HbjW
+2tWzGcjYH4zef9wYPvtGvQ+IG0v+MGIx2iD7baIg49oUkgjmvl/SLr6gEuyrZN9i
+1soL7JVZYCeJ+ZPYy3MtSd2+rocJ6NXmw/2yGqJ3kt4cJEt1lHqdqmn+9T4jxrB1
+dd36vujSoPVRkpLuz27vMwhZSAHy0WTW3OSdqSCG8ckBwAj/BJgzGJBAaZloLDDL
+Qet4omIw3w+tpkROrkg9ZeQzkDzH2CIO+MOmE+7uNgnnu8lRAJekINuJU0yXOaWj
+SIsRavE=
+-----END CERTIFICATE-----
+)EOF";
+
+// Credenciales del broker MQTT
+const char *mqtt_server = "64.23.237.187";
+const int mqtt_port = 8883;
+const char *mqtt_user = "esp32";
+const char *mqtt_password =
+    "e]|xh)T£HMOA8T?;,|EiO7oLU8+~u]f)7v6Ydfg`7£}k2,,Q`0";
+
+// Objetos cliente
+WiFiClientSecure espClient;
+PubSubClient client(espClient);
+
+// variable de respuesta mqtt
+StaticJsonDocument<256> responseFingerDoc;
+
+void reconnect() {
+  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  delay(2000); // espera sincronizacióni
+
+  // Para pruebas sin validar certificado:
+  espClient.setInsecure();
+
+  while (!client.connected()) {
+    Serial.print("Intentando conexión MQTT...");
+    if (topicsCount == 0) {
+      Serial.println("No hay topics para suscribirse.");
+      return;
+    }
+    if (client.connect("ESP32Client", mqtt_user, mqtt_password)) {
+      for (int i = 0; i < topicsCount; i++) {
+        client.subscribe(topics[i].value.c_str());
+        Serial.println("Suscrito a: " + topics[i].value);
+      }
+    } else {
+      Serial.print("falló, rc=");
+      Serial.print(client.state());
+      Serial.println(" intentando de nuevo en 5 segundos");
+      delay(5000);
+    }
+  }
+}
+
+bool mqtt_publish(const char *topic, const char *payload) {
+  if (!client.connected()) {
+    reconnect();
+  }
+  Serial.println(String("Mandando mensaje a ") + topic + ": " + payload);
+  return client.publish(topic, payload);
+}
+
+void mqtt_setup() {
+  espClient.setCACert(ca_cert);
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
+}
+
+void mqtt_loop() {
+  if (!client.connected()) {
+    reconnect();
+  }
+  client.loop();
+}
+
+// Estructura para almacenar topics
+void parse_topics(JsonObject &topicsObj) {
+  topicsCount = 0;
+  for (JsonPair kv : topicsObj) {
+    if (topicsCount >= 10)
+      break; // evitar overflow
+    topics[topicsCount].key = String(kv.key().c_str());
+    topics[topicsCount].value = String(kv.value().as<const char *>());
+    topicsCount++;
+  }
+}
+
+String get_topic_value(const String &key) {
+  for (int i = 0; i < topicsCount; i++) {
+    if (topics[i].key == key) {
+      return topics[i].value;
+    }
+  }
+  return "not found";
+}
+
+String get_topic_key(const String &topicReceived) {
+  for (int i = 0; i < topicsCount; i++) {
+    if (topics[i].value == topicReceived) {
+      return topics[i].key;
+    }
+  }
+  return "";
+}
+
+String get_topic(const String &key) {
+  for (int i = 0; i < topicsCount; i++) {
+    if (topics[i].key == key) {
+      return topics[i].value;
+    }
+  }
+  return "";  // Devuelve un puntero válido, aunque vacío
+}
+
+
+void callback(char *topic, byte *payload, unsigned int length) {
+  String topicStr = String(topic);
+  String message;
+
+  for (size_t i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+
+  String key = get_topic_key(topicStr);
+  Serial.println("Mensaje recibido de: " + key + " → " + message);
+
+  if (key == "toggle") {
+    manage_servo_payload(message);
+    
+  } else if (key == "config") {
+    Serial.println("Actualización de estado recibida: " + message);
+  } else if (key == "alarm") {
+    Serial.println("Actualización de estado recibida: " + message);
+    // turn_on_alarm();
+  } else if (key == "fingerprint") {
+    if (!json_parser(message, responseFingerDoc) || responseFingerDoc.containsKey("message")) {
+        Serial.println("ya se esta configurando una huella, espere un momento...");
+        return;
+    }else{
+        uint8_t id = responseFingerDoc["user_id"] | 0;
+        Serial.println("ID recibido: " + String(id));
+        fingerprint_create(id);
+    }
+  }
+}

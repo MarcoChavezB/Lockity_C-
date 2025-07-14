@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"name": "ESP-32-principal-brain",
+			"path": "../.."
+		}
+	],
+    "settings": {
+        "files.associations": {
+            "*.dbclient-js": "javascript",
+            ".env.*": "dotenv",
+            ".prettierrc": "json",
+            "*.css": "css",
+            "string": "cpp"
+        }
+    }
+}
