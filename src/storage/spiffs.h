@@ -12,3 +12,7 @@ void save_config_to_SPIFFS(const String &payload);
 bool load_config();
 bool delete_config();
 void print_config_to_serial();
+
+
+// variables en memoria
+extern String wifi_password;

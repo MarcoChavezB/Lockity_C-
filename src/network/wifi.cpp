@@ -7,6 +7,7 @@ const char* ap_password = "&E43+8kpG'sTbFq2)zw3RnLG2jqOKYrk:{#iLe]U6'+`Z*&@SG";
 // Buffers para almacenar las credenciales
 char userSSID[32] = "";
 char userPassword[64] = "";
+Preferences preferences;
 
 WiFiManager wm;
 WiFiServer server(3333);
@@ -28,6 +29,7 @@ bool wifi_connect() {
   // Parámetro personalizado para capturar password
   WiFiManagerParameter custom_pass_param("pass", "WiFi Password", userPassword, 64);
 
+
   wm.addParameter(&custom_pass_param);
   wm.setSaveConfigCallback(saveConfigCallback);
 
@@ -46,13 +48,32 @@ bool wifi_connect() {
 
   // Copiar password personalizado que ingresó el usuario (si se cambió)
   strcpy(userPassword, custom_pass_param.getValue());
+  
+  // Guardar SSID y password en memoria persistente
+    String passGuardada = preferences.getString("wifi_password", "");
+    if (strcmp(passGuardada.c_str(), userPassword) != 0) {
+    preferences.begin("lockity", false);
+    preferences.putString("wifi_password", userPassword);
+    Serial.print("Guardando password en memoria: ");
+    Serial.println(userPassword);
+    preferences.end();
+    }
 
   return true;
 }
 
 bool share_wifi() {
   Serial.println("Creando punto de acceso para compartir credenciales...");
+  
+  // obtener la variable de password de preferences
+    preferences.begin("lockity", true); 
+    String pass = preferences.getString("wifi_password", "");
+    Serial.print("Password obtenida de memoria: ");
+    Serial.println(pass);
+    pass.toCharArray(userPassword, sizeof(userPassword));
+    preferences.end();
 
+    
   WiFi.softAP(ap_ssid, ap_password);
   Serial.print("IP del AP: ");
   Serial.println(WiFi.softAPIP());

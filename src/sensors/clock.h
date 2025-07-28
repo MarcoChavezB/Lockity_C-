@@ -3,4 +3,5 @@
 #include <Ds1302.h>
 
 void clock_setup();
-void get_time();
+String get_time();
+String get_time_stamp();

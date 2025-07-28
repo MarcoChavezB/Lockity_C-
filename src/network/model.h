@@ -5,7 +5,7 @@
 
 struct URLRoutes {
   String initial_config;
-  String status_update;
+  String public_logs;
 };
 
 struct Topic {
@@ -28,3 +28,8 @@ extern String serial_number;
 extern bool toggleTopic;
 extern Topic topics[10];
 extern int topicsCount;
+
+extern String pendingAction;
+extern int pendingUserId;
+extern int pendingCompartmentNumber;
+extern bool logReady;

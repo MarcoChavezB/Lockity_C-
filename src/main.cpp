@@ -6,25 +6,33 @@
 #include <sensors/fingerprint.h>
 #include <storage/spiffs.h>
 #include <motor/servo.h>
+#include <sensors/clock.h>
 
 
 bool connected_wifi = false;
 bool cannectec_camera = false;
 
 void setup() {
-
   Serial.begin(115200);
   Serial.println("Starting Lockity Locker...");
+  clock_setup();
   // Elimina la red guardada
-  //reset_credentials();
+  //!reset_credentials();
+  // Confguracion inicial del reloju
+
+  
   // configuracion inicial de display
   display_init();
+  
   display_logo();
   delay(2000);
   
   
   // setup de servomotores
   setup_servo();
+  
+  // setup de alarma
+  setup_alarm();
   
   // configuracion inicial de fingerprint
   if (!fingerprint_init()) {

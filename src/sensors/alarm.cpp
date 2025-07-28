@@ -1,11 +1,12 @@
 #include "alarm.h"
 
-int alarm_pin = 2;
+int alarm_pin = 27;
 
 void setup_alarm() {
     pinMode(alarm_pin, OUTPUT);
     digitalWrite(alarm_pin, LOW);
 }
+
 void turn_off_alarm(){
     digitalWrite(alarm_pin, LOW);
     Serial.println("Alarma apagada");

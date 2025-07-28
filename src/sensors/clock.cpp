@@ -21,20 +21,21 @@ void clock_setup(){
     Serial.println("RTC detenido. Configurando hora...");
 
     Ds1302::DateTime dt = {
-      .year = 25,                   // Año: 2025
-      .month = Ds1302::MONTH_JUL,  // Mes: julio
-      .day = 5,                     // Día
-      .hour = 15,
-      .minute = 30,
-      .second = 0,
-      .dow = Ds1302::DOW_SAT       // Día de la semana (sábado)
+    .year = 25,
+    .month = Ds1302::MONTH_JUL,
+    .day = 25,
+    .hour = 16,
+    .minute = 30,
+    .second = 0,
+    .dow = Ds1302::DOW_WED
     };
+
 
     rtc.setDateTime(&dt);
   }
 }
 
-void get_time(){
+String get_time(){
   Ds1302::DateTime now;
   rtc.getDateTime(&now);
 
@@ -52,6 +53,18 @@ void get_time(){
       now.second
     );
   }
+  return String("20") + String(now.year) + "-" +
+         String(now.month) + "-" + String(now.day) + " " +
+         WeekDays[now.dow - 1] + " " +
+         String(now.hour) + ":" + String(now.minute) + ":" + String(now.second);
+         
+}
 
-  delay(100);
+String get_time_stamp(){
+    Ds1302::DateTime now;
+    rtc.getDateTime(&now);
+    
+    return String("20") + String(now.year) + "-" +
+             String(now.month) + "-" + String(now.day) + " " +
+             String(now.hour) + ":" + String(now.minute) + ":" + String(now.second);
 }

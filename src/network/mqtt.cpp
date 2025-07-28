@@ -40,6 +40,8 @@ const int mqtt_port = 8883;
 const char *mqtt_user = "esp32";
 const char *mqtt_password =
     "e]|xh)T£HMOA8T?;,|EiO7oLU8+~u]f)7v6Ydfg`7£}k2,,Q`0";
+    
+
 
 // Objetos cliente
 WiFiClientSecure espClient;
@@ -54,6 +56,8 @@ void reconnect() {
 
   // Para pruebas sin validar certificado:
   espClient.setInsecure();
+  String clientId = "ESP32Principal-" + serial_number;
+  Serial.print("Cliente conectado: " + clientId);
 
   while (!client.connected()) {
     Serial.print("Intentando conexión MQTT...");
@@ -61,7 +65,7 @@ void reconnect() {
       Serial.println("No hay topics para suscribirse.");
       return;
     }
-    if (client.connect("ESP32Client", mqtt_user, mqtt_password)) {
+    if (client.connect(clientId.c_str(), mqtt_user, mqtt_password)) {
       for (int i = 0; i < topicsCount; i++) {
         client.subscribe(topics[i].value.c_str());
         Serial.println("Suscrito a: " + topics[i].value);
@@ -86,6 +90,7 @@ bool mqtt_publish(const char *topic, const char *payload) {
 void mqtt_setup() {
   espClient.setCACert(ca_cert);
   client.setServer(mqtt_server, mqtt_port);
+  client.setBufferSize(1024);
   client.setCallback(callback);
 }
 
@@ -132,7 +137,7 @@ String get_topic(const String &key) {
       return topics[i].value;
     }
   }
-  return "";  // Devuelve un puntero válido, aunque vacío
+  return "";
 }
 
 
@@ -145,24 +150,21 @@ void callback(char *topic, byte *payload, unsigned int length) {
   }
 
   String key = get_topic_key(topicStr);
-  Serial.println("Mensaje recibido de: " + key + " → " + message);
 
   if (key == "toggle") {
     manage_servo_payload(message);
-    
   } else if (key == "config") {
     Serial.println("Actualización de estado recibida: " + message);
   } else if (key == "alarm") {
-    Serial.println("Actualización de estado recibida: " + message);
-    // turn_on_alarm();
+    turn_on_alarm();
   } else if (key == "fingerprint") {
-    if (!json_parser(message, responseFingerDoc) || responseFingerDoc.containsKey("message")) {
-        Serial.println("ya se esta configurando una huella, espere un momento...");
-        return;
-    }else{
-        uint8_t id = responseFingerDoc["user_id"] | 0;
-        Serial.println("ID recibido: " + String(id));
-        fingerprint_create(id);
+        if (!json_parser(message, responseFingerDoc) || responseFingerDoc.containsKey("message")) {
+            Serial.println("ya se esta configurando una huella, espere un momento...");
+            return;
+        }else{
+            uint8_t id = responseFingerDoc["user_id"] | 0;
+            Serial.println("ID recibido: " + String(id));
+            fingerprint_create(id);
     }
   }
 }
