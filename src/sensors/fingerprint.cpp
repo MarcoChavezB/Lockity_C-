@@ -25,13 +25,12 @@ void fingerprint_loop(){
   result = finger.fingerSearch();
   if (result == FINGERPRINT_OK) {
     Serial.print("✅ Huella detectada. ID: ");
-    Serial.print(finger.fingerID);
-    Serial.print(" | Confianza: ");
-    Serial.println(finger.confidence);
+    attemp_fingerprint = 1;
     fingerprint_shearch(finger.fingerID);
     delay(1500);
   } else {
     Serial.println("❌ Huella no encontrada.");
+    attemp_fingerprint = 2;
     delay(1000);
   }
 }
@@ -70,48 +69,61 @@ uint8_t getFingerprintEnroll(uint8_t id_param) {
   return p == FINGERPRINT_OK;
 }
 
-void fingerprint_create(uint8_t id_param) {
-  if (id_param == 0 || id_param > 127) {
-    Serial.println("ID inválido. Intenta de nuevo.");
-    mqtt_publish(
-        get_topic("fingerprint").c_str(), 
-        build_fingerprint_message(id_param, 0, "put", "fail", "Invalid ID. Please try again.").c_str()
-    );
+
+void fingerprint_create(uint16_t user_id, uint8_t drawer_id) {
+  if (!SPIFFS.begin(true)) {
+    Serial.println("❌ No se pudo montar SPIFFS.");
     return;
   }
 
-  Serial.println("Coloca el dedo para comenzar el registro...");
-  Serial.println(get_topic("fingerprint").c_str());
-  // publicar mensajes en topic
-    mqtt_publish(
-        get_topic("fingerprint").c_str(),
-        build_fingerprint_message(id_param, 1, "put", "waiting", "Put the finger to init the configuration...").c_str()
-    );
+  uint8_t fingerprint_id = get_free_fingerprint_id();
 
+  if (fingerprint_id == 0) {
+    Serial.println("❌ No hay espacio disponible para más huellas.");
+    return;
+  }
+
+  Serial.println("🆕 Iniciando registro de huella:");
+  Serial.println("👤 Usuario: " + String(user_id));
+  Serial.println("📦 Cajón: " + String(drawer_id));
+  Serial.println("🆔 Fingerprint ID asignado: " + String(fingerprint_id));
+  
+  mqtt_publish(
+    get_topic("fingerprint").c_str(),
+    build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Coloca el dedo para comenzar el registro...").c_str()
+  );
 
   while (true) {
     if (finger.getImage() == FINGERPRINT_OK) {
-      Serial.println("\nHuella detectada. Iniciando proceso...");
-      
+      Serial.println("👉 Huella detectada. Iniciando proceso...");
+
       mqtt_publish(
-        get_topic("fingerprint").c_str(), 
-        build_fingerprint_message(id_param, 1, "put", "waiting", "Finger detected. Init the process...").c_str()
+        get_topic("fingerprint").c_str(),
+        build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Huella detectada. Iniciando registro...").c_str()
       );
-      
-      if (getFingerprintEnroll(id_param)) {
+
+      if (getFingerprintEnroll(fingerprint_id)) {
         Serial.println("✅ Huella registrada correctamente.");
-        mqtt_publish(
-            get_topic("fingerprint").c_str(), 
-            build_fingerprint_message(id_param, 1, "confirm", "success", "The finger was configured").c_str()
-        );
-        delay(1000);
+
+        if (save_mapping_fingerprint(fingerprint_id, user_id, drawer_id)) {
+          mqtt_publish(
+            get_topic("fingerprint").c_str(),
+            build_fingerprint_message(fingerprint_id, 1, "confirm", "success", "Huella registrada y mapeo guardado.").c_str()
+          );
+        } else {
+          mqtt_publish(
+            get_topic("fingerprint").c_str(),
+            build_fingerprint_message(fingerprint_id, 1, "confirm", "partial", "Huella registrada pero no se guardó el mapeo.").c_str()
+          );
+        }
       } else {
         Serial.println("❌ Error al registrar la huella.");
         mqtt_publish(
-            get_topic("fingerprint").c_str(), 
-            build_fingerprint_message(id_param, 0, "put", "fail", "An error occurred, please try again.").c_str()
+          get_topic("fingerprint").c_str(),
+          build_fingerprint_message(fingerprint_id, 0, "put", "fail", "Error al registrar la huella. Intenta de nuevo.").c_str()
         );
       }
+
       break;
     }
     delay(100);
@@ -123,6 +135,11 @@ void fingerprint_delete_all() {
   int result = finger.emptyDatabase();
 
   if (result == FINGERPRINT_OK) {
+  
+    if (SPIFFS.exists("/fingerprints.json")){
+        SPIFFS.remove("/fingerprints.json");
+    }
+  
     Serial.println("✅ Todas las huellas fueron eliminadas.");
     mqtt_publish(
       get_topic("fingerprint").c_str(), 
@@ -137,6 +154,47 @@ void fingerprint_delete_all() {
     );
   }
 }
+
+    bool search_fingerprint_mapping(uint16_t fingerprint_id, uint16_t &user_id_out, uint8_t &drawer_id_out) {
+    if (!SPIFFS.begin(true)) {
+        Serial.println("❌ Error montando SPIFFS en search_fingerprint_mapping");
+        return false;
+    }
+
+    File file = SPIFFS.open("/fingerprints.json", "r");
+    if (!file) {
+        Serial.println("❌ No se pudo abrir fingerprints.json");
+        return false;
+    }
+
+    DynamicJsonDocument doc(2048);
+    DeserializationError error = deserializeJson(doc, file);
+    file.close();
+
+    if (error) {
+        Serial.print("❌ Error parseando fingerprints.json: ");
+        Serial.println(error.c_str());
+        return false;
+    }
+
+    for (JsonObject obj : doc.as<JsonArray>()) {
+        uint16_t fid = obj["fingerprint_id"].as<uint16_t>();
+        Serial.print("Leyendo fingerprint_id: ");
+        Serial.println(fid);
+        if (fid == fingerprint_id) {
+        user_id_out = obj["user_id"].as<uint16_t>();
+        drawer_id_out = obj["drawer_id"].as<uint8_t>();
+        Serial.print("✔ Encontrado: user_id = ");
+        Serial.print(user_id_out);
+        Serial.print(", drawer_id = ");
+        Serial.println(drawer_id_out);
+        return true;
+        }
+    }
+
+    Serial.println("❌ No se encontró el fingerprint_id en fingerprints.json");
+    return false;
+    }
 
 
 

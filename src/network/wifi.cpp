@@ -1,18 +1,24 @@
 #include "wifi.h"
-#include <WiFiManager.h>
 
 const char* ap_ssid = "Lockity_camera_config";
 const char* ap_password = "&E43+8kpG'sTbFq2)zw3RnLG2jqOKYrk:{#iLe]U6'+`Z*&@SG";
-
-// Buffers para almacenar las credenciales
-char userSSID[32] = "";
-char userPassword[64] = "";
-Preferences preferences;
 
 WiFiManager wm;
 WiFiServer server(3333);
 
 bool shouldSaveConfig = false;
+bool has_saved_credentials = false;
+uint8_t wifi_timeout = 60;
+
+
+void setup_ap() {
+  WiFi.mode(WIFI_AP_STA); 
+  WiFi.softAP(ap_ssid, ap_password);
+
+  IPAddress IP = WiFi.softAPIP();
+  Serial.print("🔧 Access Point creado en IP: ");
+  Serial.println(IP);
+}
 
 // Callback llamado cuando se guardan nuevas credenciales
 void saveConfigCallback() {
@@ -24,80 +30,48 @@ void reset_credentials(){
     wm.resetSettings();
 }
 
-// Función para conectar a WiFi usando WiFiManager y capturar SSID y password
 bool wifi_connect() {
-  // Parámetro personalizado para capturar password
-  WiFiManagerParameter custom_pass_param("pass", "WiFi Password", userPassword, 64);
-
-
-  wm.addParameter(&custom_pass_param);
+  WiFi.mode(WIFI_AP_STA);
+  WiFi.softAP(ap_ssid, ap_password);
+  //websocket_setup();
   wm.setSaveConfigCallback(saveConfigCallback);
+  wm.setConfigPortalTimeout(60);
+  
+  display_wifi_status(WIFI_CONNECTING);
 
-  // Inicia el portal de configuración (abre AP si no tiene credenciales)
   if (!wm.autoConnect("Lockity_config")) {
-    Serial.println("Fallo al conectar y configurar WiFi, reiniciando...");
-    delay(3000);
-    ESP.restart();
+    Serial.println("❌ Timeout o cancelación en portal WiFi. Continuando sin conexión.");
+    display_wifi_status(WIFI_TIMEOUT);
+    delay(1000);
+    return false;
   }
 
-  // Si llegamos aquí, estamos conectados a la WiFi
   Serial.println("Conectado a WiFi!");
+  display_wifi_status(WIFI_CONNECTED);
+  delay(1000);
+  has_saved_credentials = wm.getWiFiIsSaved();
   
-  // Copiar SSID actual a userSSID
-  strcpy(userSSID, WiFi.SSID().c_str());
-
-  // Copiar password personalizado que ingresó el usuario (si se cambió)
-  strcpy(userPassword, custom_pass_param.getValue());
-  
-  // Guardar SSID y password en memoria persistente
-    String passGuardada = preferences.getString("wifi_password", "");
-    if (strcmp(passGuardada.c_str(), userPassword) != 0) {
-    preferences.begin("lockity", false);
-    preferences.putString("wifi_password", userPassword);
-    Serial.print("Guardando password en memoria: ");
-    Serial.println(userPassword);
-    preferences.end();
-    }
-
   return true;
 }
 
-bool share_wifi() {
-  Serial.println("Creando punto de acceso para compartir credenciales...");
-  
-  // obtener la variable de password de preferences
-    preferences.begin("lockity", true); 
-    String pass = preferences.getString("wifi_password", "");
-    Serial.print("Password obtenida de memoria: ");
-    Serial.println(pass);
-    pass.toCharArray(userPassword, sizeof(userPassword));
-    preferences.end();
 
-    
-  WiFi.softAP(ap_ssid, ap_password);
-  Serial.print("IP del AP: ");
-  Serial.println(WiFi.softAPIP());
 
-  server.begin();
-  unsigned long startTime = millis();
-
-  while (millis() - startTime < 3000) { 
-    WiFiClient client = server.available();
-    if (client) {
-      Serial.println("Cliente conectado, enviando credenciales...");
-      printf("SSID: %s\n", userSSID);
-      printf("Password: %s\n", userPassword);
-
-      client.println(userSSID);
-      client.println(userPassword);
-      client.flush();
-      delay(100);          
-      client.stop();
-      return true;  // Éxito
+void display_wifi_status(WifiState state) {
+    switch (state) {
+        case WIFI_IDLE:
+            display_draw_center_text("Waiting...", 30);
+            break;
+        case WIFI_CONNECTING:
+            display_draw_center_text("Connecting to WiFi...", 30);
+            break;
+        case WIFI_CONNECTED:
+            display_draw_center_text("✅ WiFi connected!\nInitializing system", 30);
+            break;
+        case WIFI_FAILED:
+            display_draw_center_text("❌ Connection failed", 30);
+            break;
+        case WIFI_TIMEOUT:
+            display_draw_center_text("⏱ Timeout or canceled", 30);
+            break;
     }
-    delay(100);
-  }
-
-  Serial.println("Timeout: ningún cliente se conectó.");
-  return false;  // Fallo por timeout
 }

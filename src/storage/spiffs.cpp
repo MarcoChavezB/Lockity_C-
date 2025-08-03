@@ -2,6 +2,9 @@
 
 // Función para parsear los topics desde el JSON recibido de Configuración Inicial
 void parse_initial_config(const String& payload) {
+    Serial.println("📄 Leyendo contenido desde SPIFFS:");
+    Serial.println(payload);
+
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, payload);
 
@@ -27,7 +30,8 @@ void parse_initial_config(const String& payload) {
     
     usuarios[usuarioCount].id_usuario = user["id_usuario"].as<String>();
     usuarios[usuarioCount].name = user["nombre_usuario"].as<String>();
-
+    usuarios[usuarioCount].role = user["rol"].as<String>();
+    
     JsonArray cajonesArray = user["cajones_usuario"].as<JsonArray>();
     usuarios[usuarioCount].cajon_count = 0;
 
@@ -41,6 +45,9 @@ void parse_initial_config(const String& payload) {
         Serial.println("  - " + usuarios[usuarioCount].cajones_usuario[i]);
     }
 
+    if(usuarios[usuarioCount].role == "user"){
+      usuarioUsersCount ++;
+    }
 
     usuarioCount++;
   }
@@ -86,6 +93,15 @@ bool load_config() {
   return true;
 }
 
+bool exist_initial_config(){
+  if(SPIFFS.exists("/config.json")){
+    Serial.println("Si hay configuracion inicial ++++++++++++++");
+    return true;
+  }
+  Serial.println("No hay configuracion incial *************8");
+  return false;
+}
+
 bool delete_config() {
   if (SPIFFS.exists("/config.json")) {
     if (SPIFFS.remove("/config.json")) {
@@ -99,39 +115,102 @@ bool delete_config() {
     Serial.println("Archivo no existe");
     return false;
   }
-}
 
+}
 
 void print_config_to_serial() {
   Serial.println("===== Configuración Inicial =====");
 
-  // Mostrar ID del Locker
-  Serial.print("ID Locker: ");
-  Serial.println(idLocker);
+  if (SPIFFS.exists("/config.json")) {
+    File file = SPIFFS.open("/config.json", FILE_READ);
+    if (file) {
+      Serial.println("📄 Contenido crudo de config.json:");
+      while (file.available()) {
+        Serial.write(file.read()); 
+      }
+      file.close();
+    } else {
+      Serial.println("❌ No se pudo abrir el archivo config.json");
+    }
+  } else {
+    Serial.println("⚠️ El archivo config.json no existe");
+  }
+    Serial.println("===== Configuración fingerprints =====");
 
-  // Mostrar Topics
-  Serial.println("Topics:");
-  for (int i = 0; i < topicsCount; i++) {
-    Serial.print("  ");
-    Serial.print(topics[i].key);
-    Serial.print(" => ");
-    Serial.println(topics[i].value);
+  if(SPIFFS.exists("/fingerprints.json")){
+    File file = SPIFFS.open("/fingerprints.json", FILE_READ);
+    if (file) {
+      Serial.println("📄 Contenido crudo de fingerprints.json:");
+      while (file.available()) {
+        Serial.write(file.read()); 
+      }
+      file.close();
+    } else {
+      Serial.println("❌ No se pudo abrir el archivo fingerprints.json");
+    }
+    } else {
+        Serial.println("⚠️ El archivo fingerprints.json no existe");
   }
 
-    Serial.println("Usuarios:");
-    for (int i = 0; i < usuarioCount; i++) {
-        Serial.println("  ID Usuario: " + usuarios[i].id_usuario);
-        Serial.println("  Nombre: " + usuarios[i].name);
-        Serial.print("  Cajones: ");
-        for (int j = 0; j < usuarios[i].cajon_count; j++) {
-            Serial.print(usuarios[i].cajones_usuario[j]);
-            if (j < usuarios[i].cajon_count - 1) {
-                Serial.print(", ");
-            }
-        }
-        Serial.println();
-        Serial.println("---------------------");
-    }
-
-  Serial.println("================================");
+  Serial.println("\n================================");
 }
+
+
+
+bool save_mapping_fingerprint(uint8_t fingerprint_id, uint16_t user_id, uint8_t drawer_id) {
+  // Leer archivo existente
+  File file = SPIFFS.open("/fingerprints.json", "r");
+  DynamicJsonDocument doc(2048);
+  if (file) {
+    DeserializationError error = deserializeJson(doc, file);
+    if (error) {
+      Serial.println("Error al leer JSON: " + String(error.c_str()));
+    }
+    file.close();
+  }
+
+  // Agregar nuevo mapeo
+  JsonObject nuevo = doc.createNestedObject();
+  nuevo["fingerprint_id"] = fingerprint_id;
+  nuevo["user_id"] = user_id;
+  nuevo["drawer_id"] = drawer_id;
+
+  // Guardar archivo de nuevo
+  file = SPIFFS.open("/fingerprints.json", "w");
+  if (!file) {
+    Serial.println("No se pudo abrir el archivo para escribir");
+    return false;
+  }
+  serializeJson(doc, file);
+  file.close();
+
+  Serial.println("✅ Mapeo guardado en SPIFFS.");
+  return true;
+}
+
+uint8_t get_free_fingerprint_id() {
+  for (uint8_t i = 1; i <= 127; i++) {
+    if (!is_used_fingerprit(i)) {
+      return i;
+    }
+  }
+  return 0;
+}
+
+
+bool is_used_fingerprit(uint8_t fingerprint_id) {
+  File file = SPIFFS.open("/fingerprints.json", "r");
+  if (!file) return false;
+
+  DynamicJsonDocument doc(2048);
+  deserializeJson(doc, file);
+  file.close();
+
+  for (JsonObject obj : doc.as<JsonArray>()) {
+    if ((uint8_t)obj["fingerprint_id"] == fingerprint_id) {
+      return true;
+    }
+  }
+  return false;
+}
+

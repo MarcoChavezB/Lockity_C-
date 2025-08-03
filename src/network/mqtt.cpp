@@ -153,6 +153,8 @@ void callback(char *topic, byte *payload, unsigned int length) {
 
   if (key == "toggle") {
     manage_servo_payload(message);
+  } else if(key == "picture"){
+    send_take_picture();
   } else if (key == "config") {
     Serial.println("Actualización de estado recibida: " + message);
   } else if (key == "alarm") {
@@ -163,8 +165,9 @@ void callback(char *topic, byte *payload, unsigned int length) {
             return;
         }else{
             uint8_t id = responseFingerDoc["user_id"] | 0;
-            Serial.println("ID recibido: " + String(id));
-            fingerprint_create(id);
+            uint8_t id_drawer = responseFingerDoc["id_drawer"] | 0;
+            Serial.println("ID recibido: " + String(id) + " Cajón: " + String(id_drawer));
+            fingerprint_create(id, id_drawer);
     }
   }
 }

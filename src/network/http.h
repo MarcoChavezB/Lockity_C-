@@ -5,3 +5,5 @@
 #include "sensors/clock.h"
 bool get_initial_config();
 bool publish_toggle_log(String base64Pic, int userId, int compartment_number, String action);
+bool get_schedules();
+bool change_status_drawer(uint8_t compartent_number, String status);

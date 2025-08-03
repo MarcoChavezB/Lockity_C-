@@ -11,6 +11,7 @@
 #include "network/http.h"
 #include "logs/logs.h"
 
+
 // Declaración del certificado (extern, definido en mqtt.cpp)
 extern const char* ca_cert;
 
