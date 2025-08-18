@@ -1,11 +1,18 @@
 #include <Arduino.h>
 #include <system.h>
+#include <network/wifi.h>
+#include <network/websockets/websocket.h> 
+#include <WebServer.h>
+
+WebServer server(80); 
+
 
 unsigned long last_check = 0;
-const unsigned long check_interval = 30000; // 30 segundos
+const unsigned long check_interval = 30000;
 
 void setup() {
   Serial.begin(115200);
+  setup_ap();
 
   Serial.println("🔒 Starting Lockity Locker...");
 
@@ -22,32 +29,38 @@ void setup() {
   display_draw_center_text("Connect to\nLockity_config\nand go to 192.168.4.1", 20);
   
   // Conexión WiFi
-  if (connect_wifi()) {
-    // caso de haber conexión WiFi exitosa
-    if(!fetch_locker_config()){
-      if(exist_initial_config()){
-        display_draw_center_text("Using values\nfrom memory", 20);
-        has_initial_config = true;
+    if (connect_wifi()) {
+        if (!fetch_locker_config()) {
+            if (exist_initial_config()) {
+                display_draw_center_text("Using values\nfrom memory", 20);
+                has_initial_config = true;
+                File file = SPIFFS.open("/config.json", FILE_READ);
+                parse_initial_config(file.readString());
+                delay(2000);
+            } else {
+                display_draw_center_text("No config found\nSet up locker in system", 20);
+                has_initial_config = false;
+                delay(200);
+            }
+        }
+        display_draw_center_text("Config loaded", 20);
         delay(2000);
-      } else {
-        display_draw_center_text("No config found\nSet up locker in system", 20);
-        has_initial_config = false;
-        delay(200);
-      }
+
+        if (!get_schedules()) {
+            Serial.println("❌ No se pudieron obtener los horarios de apertura del locker");
+        }
+        setup_network_services();
+        
+        Serial.println("ajustando servos");
+        setup_servo();
+        
+        server.begin();
+    } else {
+        File file = SPIFFS.open("/config.json", FILE_READ);
+        parse_initial_config(file.readString());
+        setup_servo(); // también en el caso sin WiFi
     }
 
-    display_draw_center_text("Config loaded", 20);
-    delay(2000);
-    
-    if(!get_schedules()){
-        Serial.println("❌ No se pudieron obtener los horarios de apertura del locker");
-    }
-    setup_network_services();
-    // fin de caso
-  } else {
-    File file = SPIFFS.open("/config.json", FILE_READ);
-    parse_initial_config(file.readString());
-  }
   
   //reset_credentials();
 
@@ -59,9 +72,11 @@ void setup() {
 
 
 void loop() {
+    server.handleClient();
     fingerprint_loop();
-    websocket_loop();
     display_home();
+    websocket_loop();
+    check_drawer_timeout();
     
     if(has_wifi){
         mqtt_loop(); 
@@ -84,3 +99,21 @@ void loop() {
     }
 }
 
+
+/*void setup() {
+  Serial.begin(115200);
+
+  setup_ap();
+
+  if(wifi_connect()) {
+    Serial.println("Conectado a internet");
+  }
+
+  websocket_setup();
+  server.begin();
+}
+
+void loop() {
+  server.handleClient();
+  websocket_loop();
+}*/

@@ -22,6 +22,4 @@ extern bool has_wifi;
 extern bool already_mqtt_setup;
 extern bool has_initial_config;
 extern bool camera_connected;
-extern uint8_t attemp_fingerprint;
-
-
+extern volatile uint8_t attemp_fingerprint;

@@ -9,8 +9,26 @@ URLRoutes urls = {
   String(baseUrl) + "/locker-config/",
   String(baseUrl) + "/locker-config/store-log",
   String(baseUrl) + "/locker-config/schedules/" + serial_number, // obtener los hoarios del locker
-  String(baseUrl) + "/locker-config/" + serial_number + "/" // + compartment_number + status [open, closed, error, maintenance]
+  String(baseUrl) + "/locker-config/" + serial_number + "/", // + compartment_number + status [open, closed, error, maintenance]
+  String(baseUrl) + "/locker-config/still-open-alert/" + serial_number + "/" // compartment_number
 };
+
+bool still_open_alert(uint8_t compartment_number){
+  String url = urls.still_open_alert + String(compartment_number);
+  httpClient.begin(url);
+  httpClient.addHeader("x-iot-key", auth_header);
+  Serial.println("Conectando a: " + url);
+  int httpCode = httpClient.POST("");
+
+    if(httpCode != 200) {
+        Serial.println("Error al enviar alerta: " + String(httpCode));
+        httpClient.end();
+        return false;
+    }
+    String payload = httpClient.getString();
+    Serial.println("Respuesta: " + payload);    
+    return true;
+}
 
 bool change_status_drawer(uint8_t compartent_number, String status){
     String url = urls.change_drawer_state + String(compartent_number) + "/" + status;

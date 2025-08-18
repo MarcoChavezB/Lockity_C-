@@ -1,12 +1,12 @@
 #pragma once
+
 #include <WiFiManager.h>
 #include <display/display.h>
 #include <Preferences.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
 #include <FS.h>
 #include <SPIFFS.h>
 #include <network/websockets/websocket.h>
+#include <WebServer.h>
 
 enum WifiState {
     WIFI_IDLE,

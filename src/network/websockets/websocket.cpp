@@ -1,35 +1,31 @@
 #include "websocket.h"
 
-// ======== OBJETOS DE SERVIDOR ========
-WebServer serverSocket(80);
-WebSocketsServer webSocket(80);
+extern WebServer server;      // Servidor HTTP clásico declarado en main.cpp
+WebSocketsServer webSocket = WebSocketsServer(81);  // Puerto para WebSocket
 
-// ======== EVENTOS DEL WEBSOCKET ========
 String photoBase64Received = "";  
 bool receivingPhoto = false;
 
-void websocket_event(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
+
+// Evento de WebSocket clásico
+void webSocketEvent(uint8_t num, WStype_t type, uint8_t * payload, size_t length) {
   switch(type) {
     case WStype_CONNECTED:
-      Serial.printf("Cliente [%u] conectado\n", num);
+      Serial.printf("Cliente conectado: %u\n", num);
       camera_connected = true;
-      photoBase64Received = "";
-      receivingPhoto = false;
       break;
-
     case WStype_DISCONNECTED:
-      Serial.printf("Cliente [%u] desconectado\n", num);
+      Serial.printf("Cliente desconectado: %u\n", num);
       camera_connected = false;
       break;
-
     case WStype_TEXT: {
       String msg = String((char*)payload, length);
-      if (msg == "start_photo") {
+      if (msg == "START_PICTURE") {
         photoBase64Received = "";
         receivingPhoto = true;
         Serial.println("Iniciando recepción de foto...");
       }
-      else if (msg == "end_photo") {
+      else if (msg == "END_PICTURE") {
         receivingPhoto = false;
         Serial.println("Recepción de foto terminada. enviando...");
         if(publish_toggle_log(photoBase64Received, pendingUserId, pendingCompartmentNumber, pendingAction)){
@@ -41,26 +37,30 @@ void websocket_event(uint8_t num, WStype_t type, uint8_t * payload, size_t lengt
       else if (receivingPhoto) {
         photoBase64Received += msg;
       }
-      break;
     }
+    case WStype_BIN:
+    case WStype_ERROR:
+    case WStype_PONG:
+    case WStype_FRAGMENT_TEXT_START:
+    case WStype_FRAGMENT_BIN_START:
+    case WStype_FRAGMENT:
+    case WStype_FRAGMENT_FIN:
+      break;
   }
 }
 
-// ======== ENVÍO DE COMANDO AL ESP32-CAM ========
-void send_take_picture() {
-  if(!is_within_schedule()){
-    Serial.println("❌ No se puede tomar una foto fuera del horario permitido.");
-    return;
-  }
-  Serial.println("📤 Enviando comando: take_picture");
-  webSocket.broadcastTXT("take_picture");
-}
-
-// ======== INICIALIZACIÓN DEL WEBSOCKET Y HTTP ========
 void websocket_setup() {
   webSocket.begin();
-  webSocket.onEvent(websocket_event);
-  serverSocket.begin();
+  webSocket.onEvent(webSocketEvent);
+
+  server.on("/", []() {
+     server.send(200, "text/plain", "Hola mundo");
+  });
+}
+
+void send_take_picture(){
+    Serial.println("Enviando comando de tomar foto a WebSocket");
+    webSocket.broadcastTXT("take_picture");
 }
 
 void websocket_loop() {

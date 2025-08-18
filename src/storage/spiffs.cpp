@@ -24,9 +24,10 @@ void parse_initial_config(const String& payload) {
   // parse users
   JsonArray users = config["users"];
   usuarioCount = 0;
+  usuarioUsersCount = 0;
 
   for (JsonObject user : users) {
-    if (usuarioCount >= 5) break;
+    if (usuarioCount >= MAX_CAJONES) break;
     
     usuarios[usuarioCount].id_usuario = user["id_usuario"].as<String>();
     usuarios[usuarioCount].name = user["nombre_usuario"].as<String>();
@@ -51,6 +52,55 @@ void parse_initial_config(const String& payload) {
 
     usuarioCount++;
   }
+  
+  // parse components
+  
+
+    // parse components
+    JsonArray compArray = config["components"];
+    componentCount = 0;
+
+    for (JsonObject comp : compArray) {
+        if (componentCount >= MAX_COMPONENTS) break;
+
+        components[componentCount].id = comp["id"].as<int>();
+        components[componentCount].type = comp["type"].as<String>();
+        components[componentCount].model = comp["model"].as<String>();
+        components[componentCount].status = comp["status"].as<String>();
+
+        JsonArray pinsArr = comp["pins"];
+        components[componentCount].pinCount = 0;
+
+        if(!pinsArr.isNull()){
+            for (JsonObject pin : pinsArr) {
+                if (components[componentCount].pinCount >= MAX_PINS) break;
+
+                int idx = components[componentCount].pinCount;
+                components[componentCount].pins[idx].id = pin["id"].as<int>();
+                components[componentCount].pins[idx].componentId = pin["componentId"].as<int>();
+                components[componentCount].pins[idx].pinName = pin["pinName"].as<String>();
+                components[componentCount].pins[idx].pinNumber = pin["pinNumber"].as<int>();
+
+                components[componentCount].pinCount++;
+            }
+        }
+
+        Serial.printf("Componente ID %d (%s) modelo %s con %d pines\n",
+                      components[componentCount].id,
+                      components[componentCount].type.c_str(),
+                      components[componentCount].model.c_str(),
+                      components[componentCount].pinCount);
+
+        for (int i = 0; i < components[componentCount].pinCount; i++) {
+            Serial.printf("   Pin %s -> GPIO %d\n",
+                          components[componentCount].pins[i].pinName.c_str(),
+                          components[componentCount].pins[i].pinNumber);
+        }
+
+        componentCount++;
+    }
+
+
 
   // Debug
   Serial.println("ID Locker: " + idLocker);

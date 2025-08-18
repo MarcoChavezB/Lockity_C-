@@ -4,18 +4,21 @@ bool has_wifi = false;
 bool already_mqtt_setup = false;
 bool camera_connected = false;
 bool has_initial_config = false;
-uint8_t attemp_fingerprint = 0;
+volatile uint8_t attemp_fingerprint = 0;
 
 void init_system() {
+  Serial.println("inciando sistema");
   clock_setup();
   display_init();
   display_logo();
   delay(2000);
 
-  setup_servo();
+  //setup_servo();
   setup_alarm();
 
-  fingerprint_init();
+  if(!fingerprint_init()){
+    Serial.println("Error al inicial el fingerprint");
+  } 
 
   if (!SPIFFS.begin(true)) {
     Serial.println("❌ Error al montar SPIFFS");
@@ -23,19 +26,19 @@ void init_system() {
   }
   
   //reset_credentials();
+  reset_system_data();
 }
 
 void reset_system_data(){
   Serial.println("🔄 Reiniciando datos del sistema...");
   fingerprint_delete_all();
   delete_config();
-  reset_credentials();
+  //reset_credentials();
   Serial.println("✅ Datos del sistema reiniciados.");
 }
 
 
 bool connect_wifi() {
-  setup_ap();
   has_wifi = wifi_connect();
   return has_wifi;
 }

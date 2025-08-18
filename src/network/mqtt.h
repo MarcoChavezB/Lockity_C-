@@ -10,6 +10,7 @@
 #include "motor/servo.h"
 #include "network/http.h"
 #include "logs/logs.h"
+#include "network/websockets/websocket.h"
 
 
 // Declaración del certificado (extern, definido en mqtt.cpp)

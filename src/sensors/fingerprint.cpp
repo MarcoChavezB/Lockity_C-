@@ -4,18 +4,38 @@ HardwareSerial serial(2);
 Adafruit_Fingerprint finger(&serial);
 const char* fingerprint_topic = "/command/fingerprint";
 
+unsigned long dispFpStateStart = 0;
+
+enum DispFpState {
+  DISP_NONE,
+  DISP_SUCCESS,
+  DISP_ERROR
+};
+
+DispFpState dispFpState = DISP_NONE;
+extern volatile uint8_t attemp_fingerprint;
+uint8_t error_attemp_fingerprint;
+
 bool fingerprint_init(){
     finger.begin(57600);
     
     if(!finger.verifyPassword()) {
+        Serial.println("❌ Error: Sensor de huellas no detectado o contraseña incorrecta.");
         return false;
     }
     
+    Serial.println("✅ Sensor de huellas inicializado correctamente.");
     return true;
 }
 
+unsigned long fingerprintLastAttempt = 0;
+const unsigned long fingerprintInterval = 2000; // intervalo entre intentos
 
-void fingerprint_loop(){
+void fingerprint_loop() {
+  if (millis() - fingerprintLastAttempt < fingerprintInterval) return; // espera
+
+  fingerprintLastAttempt = millis();
+
   int result = finger.getImage();
   if (result != FINGERPRINT_OK) return;
 
@@ -25,37 +45,50 @@ void fingerprint_loop(){
   result = finger.fingerSearch();
   if (result == FINGERPRINT_OK) {
     Serial.print("✅ Huella detectada. ID: ");
+    Serial.println(finger.fingerID);
     attemp_fingerprint = 1;
     fingerprint_shearch(finger.fingerID);
-    delay(1500);
   } else {
     Serial.println("❌ Huella no encontrada.");
     attemp_fingerprint = 2;
-    delay(1000);
+    error_attemp_fingerprint ++;
+    if(error_attemp_fingerprint > 2){
+      send_take_picture();
+      error_attemp_fingerprint = 0;
+    }
+    
+    // Actualiza estado visual sin delay
+    dispFpState = DISP_ERROR;
+    dispFpStateStart = millis();
   }
 }
 
-
+// Función para registrar huella con dos toques
 uint8_t getFingerprintEnroll(uint8_t id_param) {
-  int p = -1;
-
-  p = finger.image2Tz(1);
+  int p = finger.image2Tz(1);
   if (p != FINGERPRINT_OK) return false;
 
   Serial.println("Retira el dedo...");
   mqtt_publish(
     get_topic("fingerprint").c_str(), 
-    build_fingerprint_message(id_param, 1, "put", "waiting", "Remove the finger...").c_str()
+    build_fingerprint_message(id_param, 1, "put", "waiting", "Remove your finger...").c_str()
   );
-  delay(2000);
-  while (finger.getImage() != FINGERPRINT_NOFINGER);
+
+  unsigned long start = millis();
+  while (finger.getImage() != FINGERPRINT_NOFINGER) {
+    if (millis() - start > 10000) return false; // Timeout 10s
+    delay(100);
+  }
 
   Serial.println("Coloca el mismo dedo nuevamente...");
   mqtt_publish(
     get_topic("fingerprint").c_str(), 
-    build_fingerprint_message(id_param, 1, "put", "waiting", "Put the same finger again...").c_str()
-    );
+    build_fingerprint_message(id_param, 1, "put", "waiting", "Place the same finger again...").c_str()
+  );
+
+  start = millis();
   while (finger.getImage() != FINGERPRINT_OK) {
+    if (millis() - start > 10000) return false; // Timeout 10s
     delay(100);
   }
 
@@ -68,7 +101,6 @@ uint8_t getFingerprintEnroll(uint8_t id_param) {
   p = finger.storeModel(id_param);
   return p == FINGERPRINT_OK;
 }
-
 
 void fingerprint_create(uint16_t user_id, uint8_t drawer_id) {
   if (!SPIFFS.begin(true)) {
@@ -90,16 +122,28 @@ void fingerprint_create(uint16_t user_id, uint8_t drawer_id) {
   
   mqtt_publish(
     get_topic("fingerprint").c_str(),
-    build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Coloca el dedo para comenzar el registro...").c_str()
+    build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Place your finger to start registration...").c_str()
   );
 
+  unsigned long startTime = millis();
+  const unsigned long timeout = 10000;
+
   while (true) {
+    if (millis() - startTime > timeout) {
+      Serial.println("⏳ Tiempo de registro agotado.");
+      mqtt_publish(
+        get_topic("fingerprint").c_str(),
+        build_fingerprint_message(fingerprint_id, 0, "put", "timeout", "Registration time expired. Try again.").c_str()
+      );
+      break;
+    }
+
     if (finger.getImage() == FINGERPRINT_OK) {
       Serial.println("👉 Huella detectada. Iniciando proceso...");
 
       mqtt_publish(
         get_topic("fingerprint").c_str(),
-        build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Huella detectada. Iniciando registro...").c_str()
+        build_fingerprint_message(fingerprint_id, 1, "put", "waiting", "Fingerprint detected. Starting registration...").c_str()
       );
 
       if (getFingerprintEnroll(fingerprint_id)) {
@@ -108,28 +152,28 @@ void fingerprint_create(uint16_t user_id, uint8_t drawer_id) {
         if (save_mapping_fingerprint(fingerprint_id, user_id, drawer_id)) {
           mqtt_publish(
             get_topic("fingerprint").c_str(),
-            build_fingerprint_message(fingerprint_id, 1, "confirm", "success", "Huella registrada y mapeo guardado.").c_str()
+            build_fingerprint_message(fingerprint_id, 1, "confirm", "success", "Fingerprint registered and mapping saved.").c_str()
           );
         } else {
           mqtt_publish(
             get_topic("fingerprint").c_str(),
-            build_fingerprint_message(fingerprint_id, 1, "confirm", "partial", "Huella registrada pero no se guardó el mapeo.").c_str()
+            build_fingerprint_message(fingerprint_id, 1, "confirm", "partial", "Fingerprint registered but mapping was not saved.").c_str()
           );
         }
       } else {
         Serial.println("❌ Error al registrar la huella.");
         mqtt_publish(
           get_topic("fingerprint").c_str(),
-          build_fingerprint_message(fingerprint_id, 0, "put", "fail", "Error al registrar la huella. Intenta de nuevo.").c_str()
+          build_fingerprint_message(fingerprint_id, 0, "put", "fail", "Error registering fingerprint. Try again.").c_str()
         );
       }
 
       break;
     }
+
     delay(100);
   }
 }
-
 
 void fingerprint_delete_all() {
   int result = finger.emptyDatabase();
@@ -155,33 +199,33 @@ void fingerprint_delete_all() {
   }
 }
 
-    bool search_fingerprint_mapping(uint16_t fingerprint_id, uint16_t &user_id_out, uint8_t &drawer_id_out) {
-    if (!SPIFFS.begin(true)) {
-        Serial.println("❌ Error montando SPIFFS en search_fingerprint_mapping");
-        return false;
-    }
+bool search_fingerprint_mapping(uint16_t fingerprint_id, uint16_t &user_id_out, uint8_t &drawer_id_out) {
+  if (!SPIFFS.begin(true)) {
+      Serial.println("❌ Error montando SPIFFS en search_fingerprint_mapping");
+      return false;
+  }
 
-    File file = SPIFFS.open("/fingerprints.json", "r");
-    if (!file) {
-        Serial.println("❌ No se pudo abrir fingerprints.json");
-        return false;
-    }
+  File file = SPIFFS.open("/fingerprints.json", "r");
+  if (!file) {
+      Serial.println("❌ No se pudo abrir fingerprints.json");
+      return false;
+  }
 
-    DynamicJsonDocument doc(2048);
-    DeserializationError error = deserializeJson(doc, file);
-    file.close();
+  DynamicJsonDocument doc(2048);
+  DeserializationError error = deserializeJson(doc, file);
+  file.close();
 
-    if (error) {
-        Serial.print("❌ Error parseando fingerprints.json: ");
-        Serial.println(error.c_str());
-        return false;
-    }
+  if (error) {
+      Serial.print("❌ Error parseando fingerprints.json: ");
+      Serial.println(error.c_str());
+      return false;
+  }
 
-    for (JsonObject obj : doc.as<JsonArray>()) {
-        uint16_t fid = obj["fingerprint_id"].as<uint16_t>();
-        Serial.print("Leyendo fingerprint_id: ");
-        Serial.println(fid);
-        if (fid == fingerprint_id) {
+  for (JsonObject obj : doc.as<JsonArray>()) {
+      uint16_t fid = obj["fingerprint_id"].as<uint16_t>();
+      Serial.print("Leyendo fingerprint_id: ");
+      Serial.println(fid);
+      if (fid == fingerprint_id) {
         user_id_out = obj["user_id"].as<uint16_t>();
         drawer_id_out = obj["drawer_id"].as<uint8_t>();
         Serial.print("✔ Encontrado: user_id = ");
@@ -189,14 +233,12 @@ void fingerprint_delete_all() {
         Serial.print(", drawer_id = ");
         Serial.println(drawer_id_out);
         return true;
-        }
-    }
+      }
+  }
 
-    Serial.println("❌ No se encontró el fingerprint_id en fingerprints.json");
-    return false;
-    }
-
-
+  Serial.println("❌ No se encontró el fingerprint_id en fingerprints.json");
+  return false;
+}
 
 /**
  * @brief Construye un mensaje JSON para operaciones de huella digital.

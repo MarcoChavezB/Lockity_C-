@@ -14,22 +14,30 @@ const static char* WeekDays[] = {
   "Thursday", "Friday", "Saturday", "Sunday"
 };
 
-void clock_setup(){
+unsigned long get_current_seconds() {
+    Ds1302::DateTime now;
+    rtc.getDateTime(&now);
+    return now.hour * 3600UL + now.minute * 60UL + now.second;
+}
+
+void clock_setup() {
     rtc.init();
 
     Ds1302::DateTime now;
     rtc.getDateTime(&now);
-    bool relojMal = (now.year < 24 || now.year > 40 || now.month == 0 || now.month > 12);
-    
-    if (relojMal || rtc.isHalted()) {
+
+        Serial.println("configurando relgo");
+
+    if (rtc.isHalted() || now.year < 24 || now.year > 40 || now.month == 0 || now.month > 12) {
+        // ⚠️ Solo la PRIMERA vez (o cuando cambies batería) debes ajustar la fecha real
         Ds1302::DateTime dt = {
-            .year = 25,  // 2025
-            .month = Ds1302::MONTH_JUL,
-            .day = 31,
-            .hour = 16,
-            .minute = 50,
+            .year = 25,
+            .month = Ds1302::MONTH_AUG,
+            .day = 16,
+            .hour = 10,
+            .minute = 18,
             .second = 0,
-            .dow = Ds1302::DOW_THU
+            .dow = Ds1302::DOW_SAT
         };
 
         rtc.setDateTime(&dt);
@@ -67,8 +75,7 @@ String get_time_stamp(){
     rtc.getDateTime(&now);
     
     return String("20") + String(now.year) + "-" +
-             String(now.month) + "-" + String(now.day) + " " +
-             String(now.hour) + ":" + String(now.minute) + ":" + String(now.second);
+             String(now.month) + "-" + String(now.day) + "/" + String(now.hour) + ":" + String(now.minute) + ":" + String(now.second);
 }
 
 
@@ -93,22 +100,45 @@ bool is_within_schedule() {
   todayStr += (now.month < 10 ? "0" : "") + String(now.month) + "-";
   todayStr += (now.day < 10 ? "0" : "") + String(now.day);
 
+  Serial.println("📅 [is_within_schedule] --- Verificando horarios ---");
+  Serial.print("Hora actual: ");
+  Serial.print(now.hour); Serial.print(":");
+  Serial.print(now.minute); Serial.print(":");
+  Serial.println(now.second);
+
+  Serial.print("Día actual (dow): "); Serial.println(currentDay);
+  Serial.print("Fecha actual: "); Serial.println(todayStr);
+  Serial.print("Segundos actuales: "); Serial.println(currentTime);
+
   for (int i = 0; i < scheduleCount; i++) {
     Schedule s = schedules[i];
+
+    Serial.println("──────────────────────────────");
+    Serial.print("Evaluando horario #"); Serial.println(i);
+    Serial.print("Start: "); Serial.println(s.start_time);
+    Serial.print("End:   "); Serial.println(s.end_time);
+    Serial.print("Repeat: "); Serial.println(s.repeat_schedule ? "Sí" : "No");
+    Serial.print("Day_of_week: "); Serial.println(s.day_of_week);
+    Serial.print("Schedule_date: "); Serial.println(s.schedule_date);
 
     bool isMatch = false;
 
     if (s.repeat_schedule) {
       if (s.day_of_week == currentDay) {
         isMatch = true;
+        Serial.println("✔ Coincide con el día de la semana");
       }
     } else {
       if (s.schedule_date.length() >= 10 && s.schedule_date.substring(0, 10) == todayStr) {
         isMatch = true;
+        Serial.println("✔ Coincide con la fecha específica");
       }
     }
 
-    if (!isMatch) continue;
+    if (!isMatch) {
+      Serial.println("❌ No coincide ni día ni fecha, se omite.");
+      continue;
+    }
 
     int sh = s.start_time.substring(0, 2).toInt();
     int sm = s.start_time.substring(3, 5).toInt();
@@ -120,10 +150,18 @@ bool is_within_schedule() {
     int es = s.end_time.substring(6, 8).toInt();
     int endSeconds = eh * 3600 + em * 60 + es;
 
+    Serial.print("Rango en segundos: ");
+    Serial.print(startSeconds); Serial.print(" -> "); Serial.println(endSeconds);
+
     if (currentTime >= startSeconds && currentTime <= endSeconds) {
+      Serial.println("✅ Está dentro del horario");
       return true;
+    } else {
+      Serial.println("⏱ Fuera del rango de tiempo");
     }
   }
+
+  Serial.println("❌ Ningún horario válido encontrado");
   return false;
 }
 

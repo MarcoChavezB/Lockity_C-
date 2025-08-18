@@ -4,20 +4,15 @@ const char* ap_ssid = "Lockity_camera_config";
 const char* ap_password = "&E43+8kpG'sTbFq2)zw3RnLG2jqOKYrk:{#iLe]U6'+`Z*&@SG";
 
 WiFiManager wm;
-WiFiServer server(3333);
 
 bool shouldSaveConfig = false;
 bool has_saved_credentials = false;
 uint8_t wifi_timeout = 60;
 
-
+// Solo configura el modo AP + STA y el AP
 void setup_ap() {
-  WiFi.mode(WIFI_AP_STA); 
+  WiFi.mode(WIFI_AP_STA);
   WiFi.softAP(ap_ssid, ap_password);
-
-  IPAddress IP = WiFi.softAPIP();
-  Serial.print("🔧 Access Point creado en IP: ");
-  Serial.println(IP);
 }
 
 // Callback llamado cuando se guardan nuevas credenciales
@@ -26,35 +21,23 @@ void saveConfigCallback() {
   shouldSaveConfig = true;
 }
 
-void reset_credentials(){
-    wm.resetSettings();
+void reset_credentials() {
+  wm.resetSettings();
 }
 
 bool wifi_connect() {
-  WiFi.mode(WIFI_AP_STA);
-  WiFi.softAP(ap_ssid, ap_password);
-  //websocket_setup();
   wm.setSaveConfigCallback(saveConfigCallback);
   wm.setConfigPortalTimeout(60);
-  
-  display_wifi_status(WIFI_CONNECTING);
 
+  // Inicia portal config si no conecta a WiFi previamente configurado
   if (!wm.autoConnect("Lockity_config")) {
-    Serial.println("❌ Timeout o cancelación en portal WiFi. Continuando sin conexión.");
-    display_wifi_status(WIFI_TIMEOUT);
-    delay(1000);
+    Serial.println("❌ No se pudo conectar a router.");
     return false;
   }
 
-  Serial.println("Conectado a WiFi!");
-  display_wifi_status(WIFI_CONNECTED);
-  delay(1000);
-  has_saved_credentials = wm.getWiFiIsSaved();
-  
+  Serial.println("✅ STA conectada a internet.");
   return true;
 }
-
-
 
 void display_wifi_status(WifiState state) {
     switch (state) {

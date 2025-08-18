@@ -4,12 +4,15 @@
 #define MAX_CAJONES 5
 #define MAX_DRAWERS 3
 #define MAX_SCHEDULES 10
+#define MAX_COMPONENTS 15
+#define MAX_PINS 5
 
 struct URLRoutes {
   String initial_config;
   String public_logs;
   String get_schedules;
   String change_drawer_state;
+  String still_open_alert;
 };
 
 enum DrawerState {
@@ -68,5 +71,32 @@ extern bool logReady;
 extern Schedule schedules[MAX_SCHEDULES];
 extern int scheduleCount;
 
+
+
+// --------------------- NUEVO PARA COMPONENTES ---------------------
+
+struct PinInfo {
+  int id;
+  int componentId;
+  String pinName;
+  int pinNumber;
+};
+
+struct Component {
+  int id;
+  String type;
+  String model;
+  String status;
+  PinInfo pins[MAX_PINS];
+  int pinCount;
+};
+
+extern Component components[MAX_COMPONENTS];
+extern int componentCount;
+
+// ---------------------------------------------------------------
+
+
 const char* drawerStateToString(DrawerState state);
+int getPinsByType(const String& type, int* pinBuffer);
 int getDrawerIndexByNumber(int drawerNumber);

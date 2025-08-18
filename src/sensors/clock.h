@@ -6,4 +6,5 @@
 void clock_setup();
 String get_time();
 String get_time_stamp();
+unsigned long get_current_seconds();
 bool is_within_schedule();
